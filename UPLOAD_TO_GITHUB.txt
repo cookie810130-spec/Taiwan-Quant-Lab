@@ -1,0 +1,10 @@
+GitHub 網頁上傳快速步驟
+1. 建立 repository：Taiwan-Quant-Lab
+2. 解壓縮本 ZIP。
+3. 在 repository 根目錄選 Add file -> Upload files。
+4. 把解壓縮後的「專案內部所有檔案與資料夾」拖進上傳區，不要只上傳 ZIP。
+5. Commit changes。
+6. 到 Actions 確認 Python tests 工作流程。
+7. 到 https://share.streamlit.io/ 連結 repository 並部署 app.py。
+8. 先用內建測試資料驗收；要用 FinMind 時，再到雲端 Secrets 設定 FINMIND_TOKEN。
+注意：本次只產生 ZIP，沒有建立 GitHub repository、推送程式碼或部署服務。
