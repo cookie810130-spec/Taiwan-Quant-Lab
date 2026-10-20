@@ -1,0 +1,73 @@
+name: Taiwan Quant Lab CI
+
+on:
+  push:
+    branches: ["main", "master", "develop"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quant-lab-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Python tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: "**/requirements.txt"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            python -m pip install -r requirements.txt
+          else
+            echo "::error::requirements.txt was not found in the repository root."
+            exit 1
+          fi
+
+      - name: Verify project structure
+        shell: bash
+        run: |
+          echo "Repository root: $GITHUB_WORKSPACE"
+          echo "Top-level files:"
+          ls -la
+          if [ ! -f "quantlab/__init__.py" ]; then
+            echo "::error::Expected quantlab/__init__.py at repository root."
+            echo "Please ensure the quantlab folder is committed at the repository root."
+            exit 1
+          fi
+          if [ ! -d "tests" ]; then
+            echo "::error::Expected tests/ directory at repository root."
+            exit 1
+          fi
+          if [ ! -f "quantlab/data/sample.py" ]; then
+            echo "::error::Expected quantlab/data/sample.py."
+            exit 1
+          fi
+
+      - name: Check Python syntax
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m compileall -q app.py quantlab
+
+      - name: Run tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m pytest -q tests
