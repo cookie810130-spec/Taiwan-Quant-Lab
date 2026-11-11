@@ -1,10 +1,10 @@
-name: Taiwan-Quant-Lab V2 (Windows source + Android APK)
+name: Taiwan-Quant-Lab V2.1 (Windows source + Android APK)
 
 on:
   push:
-    branches: ["v2.0"]
+    branches: ["v2.0", "v2.1"]
   pull_request:
-    branches: ["main"]
+    branches: ["main", "v2.0"]
   workflow_dispatch:
 
 permissions:
@@ -49,7 +49,7 @@ jobs:
         run: gradle :app:assembleDebug --no-daemon --stacktrace
       - uses: actions/upload-artifact@v4
         with:
-          name: taiwan-quant-lab-v2-android-debug-apk
+          name: taiwan-quant-lab-v2.1-android-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 7
@@ -61,11 +61,11 @@ jobs:
       - uses: actions/checkout@v4
       - name: Package Windows source without secrets or virtualenv
         run: |
-          mkdir -p dist/Taiwan-Quant-Lab-V2
-          cp -R app.py quantlab requirements.txt requirements-v2.txt install_v2.bat start_v2_api.bat V2_README.md windows dist/Taiwan-Quant-Lab-V2/
-          cd dist && zip -qr Taiwan-Quant-Lab-V2-Windows.zip Taiwan-Quant-Lab-V2
+          mkdir -p dist/Taiwan-Quant-Lab-V2.1
+          cp -R app.py quantlab requirements.txt requirements-v2.txt install_v2.bat start_v2_api.bat V2_README.md V21_README.md windows data_examples dist/Taiwan-Quant-Lab-V2.1/
+          cd dist && zip -qr Taiwan-Quant-Lab-V2.1-Windows.zip Taiwan-Quant-Lab-V2.1
       - uses: actions/upload-artifact@v4
         with:
-          name: taiwan-quant-lab-v2-windows-source
-          path: dist/Taiwan-Quant-Lab-V2-Windows.zip
+          name: taiwan-quant-lab-v2.1-windows-source
+          path: dist/Taiwan-Quant-Lab-V2.1-Windows.zip
           retention-days: 7
