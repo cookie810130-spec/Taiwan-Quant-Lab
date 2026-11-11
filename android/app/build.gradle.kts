@@ -7,11 +7,11 @@ android {
     namespace = "tw.quantlab.mobile"
     compileSdk = 35
     defaultConfig {
-        applicationId = "tw.quantlab.mobile"
+        applicationId = "tw.quantlab.mobile.v21"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "2.0.0-alpha"
+        versionCode = 21
+        versionName = "2.1.0-alpha"
     }
     buildTypes { release { isMinifyEnabled = false } }
     compileOptions {
