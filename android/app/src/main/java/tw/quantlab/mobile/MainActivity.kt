@@ -71,6 +71,9 @@ fun QuantLabScreen() {
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf("請填入 Tailscale HTTPS 網址及 API Key。") }
     var result by remember { mutableStateOf<JSONObject?>(null) }
+    var updateState by remember { mutableStateOf<JSONObject?>(null) }
+    var scoreState by remember { mutableStateOf<JSONObject?>(null) }
+    var journalState by remember { mutableStateOf<JSONObject?>(null) }
     val scope = rememberCoroutineScope()
 
     fun run(path: String, payload: JSONObject? = null) {
@@ -83,11 +86,31 @@ fun QuantLabScreen() {
                     apiCall(server.trim(), apiKey, path, payload)
                 }
                 prefs.edit().putString("url", server.trim()).apply()
-                if (payload == null) {
-                    message = "Windows Python API 已連線；版本：${response.optString("version")}"
-                } else {
-                    result = response
-                    message = "分析完成。以下是模型與模擬輸出，不是保證的未來機率。"
+                when (path) {
+                    "/api/v2.1/scorecard" -> {
+                        scoreState = response
+                        message = "已取得 V2.1 預測評分；只有到期的真實預測才會評分。"
+                    }
+                    "/api/v2.1/data/update" -> {
+                        updateState = response.optJSONObject("update")
+                        scoreState = null
+                        message = "TWSE 官方行情更新完成；請查看最新日期。"
+                    }
+                    "/api/v2.1/research" -> {
+                        result = response.optJSONObject("forecast")
+                        updateState = response.optJSONObject("update")
+                        journalState = response.optJSONObject("journal")
+                        scoreState = null
+                        message = "官方行情更新、AI 模擬與預測紀錄完成。"
+                    }
+                    else -> {
+                        if (payload == null) {
+                            message = "Windows Python API 已連線；版本：${response.optString("version")}"
+                        } else {
+                            result = response
+                            message = "分析完成。以下是模型與模擬輸出，不是保證的未來機率。"
+                        }
+                    }
                 }
             } catch (e: Exception) {
                 message = "連線或計算失敗：${e.message ?: "未知錯誤"}"
@@ -103,7 +126,7 @@ fun QuantLabScreen() {
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text("台灣量子實驗室", style = MaterialTheme.typography.headlineSmall)
-        Text("AI 情境推演 V2.0 · Windows Python 背景運算",
+        Text("AI 情境推演 V2.1 · 真實行情 + 預測追蹤",
             style = MaterialTheme.typography.bodyMedium)
         OutlinedTextField(
             value = server, onValueChange = { server = it },
@@ -152,6 +175,47 @@ fun QuantLabScreen() {
             modifier = Modifier.fillMaxWidth()
         ) { Text(if (busy) "分析中…" else "執行 AI 情境推演") }
 
+        HorizontalDivider()
+        Text("V2.1 真實台股資料與追蹤", style = MaterialTheme.typography.titleMedium)
+        Text("官方 TWSE 上市四位數股票；新股票第一次下載約四年日線，可能較久。")
+        Button(
+            onClick = {
+                run("/api/v2.1/data/update",
+                    JSONObject().put("symbol", symbol).put("years", 4))
+            }, enabled = !busy, modifier = Modifier.fillMaxWidth()
+        ) { Text("更新證交所真實行情") }
+        Button(
+            onClick = {
+                source = "db"
+                val req = JSONObject().put("symbol", symbol).put("source", "db")
+                    .put("horizon", horizon).put("paths", 1000).put("seed", 19)
+                    .put("years", 4)
+                run("/api/v2.1/research", req)
+            }, enabled = !busy, modifier = Modifier.fillMaxWidth()
+        ) { Text("更新行情＋AI 預測＋永久紀錄") }
+        OutlinedButton(
+            onClick = { run("/api/v2.1/scorecard") },
+            enabled = !busy, modifier = Modifier.fillMaxWidth()
+        ) { Text("查看到期預測驗證報告") }
+        updateState?.let { u ->
+            Text("資料來源：${u.optString("source")} · 最新交易日：${u.optString("latest_date")}")
+            Text("本次更新：${u.optInt("updated_rows")} 筆；狀態：${u.optString("status")}")
+        }
+        journalState?.let { j ->
+            Text(if (j.optBoolean("saved")) "預測已永久記錄（不可覆寫）"
+                 else "當日相同預測已存在，保留原紀錄")
+        }
+        scoreState?.let { s ->
+            Text("已到期驗證：${s.optInt("count_evaluated")}；待到期：${s.optInt("count_pending")}")
+            val hs = s.optJSONArray("horizons")
+            if (hs != null) for (i in 0 until hs.length()) {
+                val h = hs.getJSONObject(i)
+                val brier = if (h.isNull("ml_brier")) "樣本不足" else "%.3f".format(
+                    java.util.Locale.US, h.getDouble("ml_brier"))
+                Text("${h.optInt("trading_days")} 日：${h.optInt("evaluated")} 筆，Brier ${brier}")
+            }
+            Text("評分需要真實未來行情到期，並不代表模型已有交易優勢。")
+        }
         Text(message, color = MaterialTheme.colorScheme.secondary)
         result?.let { r ->
             val sim = r.getJSONObject("simulation")
