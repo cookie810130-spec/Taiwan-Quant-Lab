@@ -1,0 +1,18 @@
+# Local state and secrets are never committed
+.venv/
+.venv-v2/
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+.env.*
+!*.example
+data/v2/
+*.duckdb
+*.duckdb.wal
+*.db
+api_key.txt
+android/.gradle/
+android/local.properties
+android/**/build/
+android/.idea/
