@@ -95,3 +95,64 @@ def list_symbols(db_path=None) -> list[dict]:
         conn.close()
     return [{"symbol": a, "rows": b, "start_date": str(c), "end_date": str(d),
              "provenance": e} for a, b, c, d, e in rows]
+
+
+def latest_date(symbol: str, db_path=None):
+    """Latest persisted observed exchange date, or None."""
+    symbol = check_symbol(symbol)
+    path = Path(db_path) if db_path is not None else DEFAULT_DB
+    if not path.exists():
+        return None
+    conn = _connect(path)
+    try:
+        return conn.execute("SELECT MAX(date) FROM daily_prices WHERE symbol = ?",
+                            [symbol]).fetchone()[0]
+    finally:
+        conn.close()
+
+
+def price_provenance(symbol: str, db_path=None) -> str:
+    symbol = check_symbol(symbol)
+    path = Path(db_path) if db_path is not None else DEFAULT_DB
+    if not path.exists():
+        raise FileNotFoundError("行情資料庫不存在。")
+    conn = _connect(path)
+    try:
+        row = conn.execute(
+            "SELECT provenance FROM daily_prices WHERE symbol=? ORDER BY date DESC LIMIT 1",
+            [symbol]).fetchone()
+    finally:
+        conn.close()
+    if not row:
+        raise ValueError("找不到此股票的行情來源。")
+    return str(row[0])
+
+
+def upsert_prices(symbol: str, frame: pd.DataFrame, provenance: str, db_path=None) -> int:
+    """Atomically insert/replace a validated batch with a clearly marked source."""
+    symbol = check_symbol(symbol)
+    if provenance not in ("twse_official", "finmind", "user_csv_unverified"):
+        raise ValueError("不允許沒有來源標籤的行情。")
+    data = normalize_ohlcv(frame)
+    if data.empty:
+        return 0
+    if (data["volume"] < 0).any():
+        raise ValueError("成交量不可小於零。")
+    rows = [(symbol, row.date.date(), float(row.open), float(row.high),
+             float(row.low), float(row.close), int(row.volume), provenance)
+            for row in data.itertuples(index=False)]
+    conn = _connect(db_path)
+    try:
+        conn.execute("BEGIN TRANSACTION")
+        conn.executemany("""
+            INSERT OR REPLACE INTO daily_prices
+            (symbol, date, open, high, low, close, volume, provenance)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, rows)
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+    finally:
+        conn.close()
+    return len(rows)
