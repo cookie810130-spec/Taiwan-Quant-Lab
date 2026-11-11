@@ -125,7 +125,7 @@ fun QuantLabScreen() {
             .padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text("台灣量子實驗室", style = MaterialTheme.typography.headlineSmall)
+        Text("台灣量化實驗室", style = MaterialTheme.typography.headlineSmall)
         Text("AI 情境推演 V2.1 · 真實行情 + 預測追蹤",
             style = MaterialTheme.typography.bodyMedium)
         OutlinedTextField(
