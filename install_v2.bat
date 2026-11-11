@@ -2,15 +2,17 @@
 setlocal
 title Install Taiwan-Quant-Lab V2
 cd /d "%~dp0"
-where py >nul 2>nul
-if errorlevel 1 (
-    echo Python launcher not found. Install Python 3.12 first.
-    pause
-    exit /b 1
+if not exist ".venv-v2\Scripts\python.exe" (
+    if exist "%USERPROFILE%\.venv\Scripts\python.exe" (
+        echo Found your existing Python 3 environment.
+        "%USERPROFILE%\.venv\Scripts\python.exe" -m venv ".venv-v2"
+    ) else (
+        echo Using Python 3.12 launcher.
+        py -3.12 -m venv ".venv-v2"
+    )
 )
-if not exist ".venv-v2\Scripts\python.exe" py -3.12 -m venv ".venv-v2"
-if errorlevel 1 (
-    echo Failed to create environment.
+if not exist ".venv-v2\Scripts\python.exe" (
+    echo Cannot find Python 3.12 or create .venv-v2.
     pause
     exit /b 1
 )
