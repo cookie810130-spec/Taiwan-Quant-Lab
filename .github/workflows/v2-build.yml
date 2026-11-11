@@ -1,0 +1,71 @@
+name: Taiwan-Quant-Lab V2 (Windows source + Android APK)
+
+on:
+  push:
+    branches: ["v2.0"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  python-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: "requirements-v2.txt"
+      - run: python -m pip install -r requirements-v2.txt
+      - name: Python syntax and tests
+        env:
+          PYTHONPATH: ${ github.workspace }
+        run: |
+          python -m compileall -q app.py quantlab
+          python -m pytest -q tests
+
+  android-debug-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK platform
+        run: sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - name: Compile Android debug APK
+        working-directory: android
+        run: gradle :app:assembleDebug --no-daemon --stacktrace
+      - uses: actions/upload-artifact@v4
+        with:
+          name: taiwan-quant-lab-v2-android-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
+
+  windows-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package Windows source without secrets or virtualenv
+        run: |
+          mkdir -p dist/Taiwan-Quant-Lab-V2
+          cp -R app.py quantlab requirements.txt requirements-v2.txt install_v2.bat start_v2_api.bat V2_README.md windows dist/Taiwan-Quant-Lab-V2/
+          cd dist && zip -qr Taiwan-Quant-Lab-V2-Windows.zip Taiwan-Quant-Lab-V2
+      - uses: actions/upload-artifact@v4
+        with:
+          name: taiwan-quant-lab-v2-windows-source
+          path: dist/Taiwan-Quant-Lab-V2-Windows.zip
+          retention-days: 7
