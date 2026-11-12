@@ -11,7 +11,10 @@ $script = Join-Path $root 'windows\run_v21_daily.ps1'
 $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument (
     '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + $script + '"'
 ) -WorkingDirectory $root
-$trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday,Tuesday,Wednesday,Thursday,Friday -At 17:30
+# Explicit typed DayOfWeek array and DateTime avoid argument binding on some Win10 PowerShell 5.1 locales.
+$weekdays = @([System.DayOfWeek]::Monday, [System.DayOfWeek]::Tuesday, [System.DayOfWeek]::Wednesday, [System.DayOfWeek]::Thursday, [System.DayOfWeek]::Friday)
+$runAt = [datetime]::Today.AddHours(17).AddMinutes(30)
+$trigger = New-ScheduledTaskTrigger -Weekly -WeeksInterval 1 -DaysOfWeek $weekdays -At $runAt
 $principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel LeastPrivilege
 $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes 30) -StartWhenAvailable -AllowStartIfOnBatteries
 Register-ScheduledTask -TaskName 'TaiwanQuantLabV21Daily' -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force
