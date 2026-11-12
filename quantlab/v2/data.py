@@ -6,7 +6,7 @@ import os
 
 from quantlab.data.sample import make_sample_data
 from quantlab.data.finmind import fetch_finmind_prices
-from quantlab.v2.storage import check_symbol, read_prices
+from quantlab.v2.storage import check_symbol, read_prices, price_provenance
 
 
 def get_prices(symbol: str, source: str):
@@ -16,7 +16,7 @@ def get_prices(symbol: str, source: str):
                                  date.today(), symbol)
         return frame, "demo"
     if source == "db":
-        return read_prices(symbol), "db_user_csv_unverified"
+        return read_prices(symbol), price_provenance(symbol)
     if source == "finmind":
         token = os.environ.get("FINMIND_TOKEN", "").strip()
         if not token:

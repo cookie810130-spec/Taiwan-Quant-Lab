@@ -19,7 +19,7 @@ from quantlab.v2.data import get_prices
 from quantlab.v2.forecast import predict_scenarios
 from quantlab.v2.storage import list_symbols, check_symbol
 
-app = FastAPI(title="Taiwan Quant Lab V2", version="2.0.0-alpha",
+app = FastAPI(title="Taiwan Quant Lab V2", version="2.1.0-alpha",
               description="Research-only, private Tailscale API")
 jobs: dict[str, dict] = {}
 jobs_lock = Lock()
@@ -53,12 +53,12 @@ def execute(request: ForecastRequest) -> dict:
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "product": "Taiwan-Quant-Lab", "version": "v2-alpha"}
+    return {"status": "ok", "product": "Taiwan-Quant-Lab", "version": "v2.1-alpha"}
 
 
 @app.get("/api/v2/info", dependencies=[Depends(require_key)])
 def info():
-    return {"version": "2.0.0-alpha", "research_only": True,
+    return {"version": "2.1.0-alpha", "research_only": True,
             "data_sources": ["demo", "db", "finmind"],
             "models": ["conditional_block_bootstrap", "logistic_regression"],
             "no_live_broker_orders": True}
@@ -113,3 +113,100 @@ def get_job(job_id: str):
         if not job:
             raise HTTPException(status_code=404, detail="找不到任務（重啟會清除 alpha 版暫存任務）。")
         return dict(job)
+
+
+
+# V2.1 endpoints are opt-in. Existing /api/v2 routes remain compatible.
+from quantlab.v2.twse import TWSEError, refresh_twse
+from quantlab.v2.journal import save_forecast, mature_forecasts, history, scorecard
+
+
+class UpdateRequest(BaseModel):
+    symbol: str = Field(default="2330", min_length=1, max_length=20)
+    years: int = Field(default=4, ge=1, le=10)
+
+
+class ResearchRequest(ForecastRequest):
+    years: int = Field(default=4, ge=1, le=10)
+
+
+def _v21_error(e: Exception):
+    if isinstance(e, (ValueError, FileNotFoundError, TWSEError)):
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    import logging
+    logging.exception("V2.1 request failed")
+    raise HTTPException(status_code=500, detail="資料更新或研究失敗；請查看 Windows 日誌。") from e
+
+
+@app.post("/api/v2.1/data/update", dependencies=[Depends(require_key)])
+def v21_update(request: UpdateRequest):
+    """Explicit manual TWSE incremental sync; listed, four-digit symbols only."""
+    try:
+        info = refresh_twse(request.symbol, years=request.years)
+        score = mature_forecasts()
+        return {"update": info, "evaluation": score}
+    except Exception as e:
+        _v21_error(e)
+
+
+@app.post("/api/v2.1/forecast", dependencies=[Depends(require_key)])
+def v21_forecast(request: ForecastRequest):
+    """Real local data only, then freeze an immutable forecast snapshot."""
+    if request.source != "db":
+        raise HTTPException(status_code=422,
+                            detail="永久預測紀錄必須使用本機資料庫真實資料（source=db）。")
+    try:
+        result = execute(request)
+        snap = save_forecast(result)
+        mature = mature_forecasts()
+        return {"forecast": result, "journal": snap, "evaluation": mature}
+    except Exception as e:
+        _v21_error(e)
+
+
+@app.post("/api/v2.1/research", dependencies=[Depends(require_key)])
+def v21_research(request: ResearchRequest):
+    """One-tap TWSE update -> forecast -> journal -> mature older predictions."""
+    try:
+        update = refresh_twse(request.symbol, years=request.years)
+        if update["status"] == "no_new_data" and update["latest_date"] is None:
+            raise ValueError("TWSE 尚未提供此股票的有效日線。")
+        forecast_request = ForecastRequest(
+            symbol=request.symbol, source="db", horizon=request.horizon,
+            paths=request.paths, seed=request.seed)
+        forecast = execute(forecast_request)
+        snap = save_forecast(forecast)
+        evaluated = mature_forecasts()
+        return {"update": update, "forecast": forecast, "journal": snap,
+                "evaluation": evaluated}
+    except Exception as e:
+        _v21_error(e)
+
+
+@app.get("/api/v2.1/history", dependencies=[Depends(require_key)])
+def v21_history(symbol: str | None = None, limit: int = 30):
+    try:
+        return {"history": history(symbol, limit)}
+    except Exception as e:
+        _v21_error(e)
+
+
+@app.get("/api/v2.1/scorecard", dependencies=[Depends(require_key)])
+def v21_scorecard():
+    try:
+        mature_forecasts()
+        return scorecard()
+    except Exception as e:
+        _v21_error(e)
+
+
+@app.get("/api/v2.1/status", dependencies=[Depends(require_key)])
+def v21_status():
+    return {
+        "version": "2.1.0-alpha", "research_only": True,
+        "official_feed": "TWSE STOCK_DAY (listed 4-digit stocks only)",
+        "automatic_market_wide_sync": False,
+        "no_broker_orders": True,
+        "data": list_symbols(), "verification": scorecard(),
+        "note": "每日任務需另外安裝 Windows Task Scheduler；關機期間無法更新。",
+    }
